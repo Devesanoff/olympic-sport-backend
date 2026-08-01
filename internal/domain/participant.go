@@ -30,6 +30,8 @@ type ParticipantRepository interface {
 	Create(ctx context.Context, p *Participant) error
 	GetByID(ctx context.Context, id string) (*Participant, error)
 	List(ctx context.Context, limit, offset int) ([]*Participant, int, error)
+	GetByIDs(ctx context.Context, ids []string) ([]*Participant, error)
+	GetByCategoryID(ctx context.Context, categoryID int) ([]*Participant, error)
 }
 
 // ParticipantService holds use cases / business logic operations for Participants.

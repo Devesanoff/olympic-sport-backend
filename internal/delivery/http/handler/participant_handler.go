@@ -83,21 +83,3 @@ func (h *ParticipantHandler) List(c *gin.Context) {
 	})
 }
 
-// GenerateBadge handles GET /api/badges/:participantId/generate.
-func (h *ParticipantHandler) GenerateBadge(c *gin.Context) {
-	id := c.Param("participantId")
-	p, err := h.service.GetByID(c.Request.Context(), id)
-	if err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": "participant not found"})
-		return
-	}
-
-	c.JSON(http.StatusOK, gin.H{
-		"badge_type":       "MOCK_PDF_STUB",
-		"participant_id":   p.ID,
-		"full_name":        p.FullName,
-		"category_id":      p.CategoryID,
-		"qr_token":         p.QRToken,
-		"download_message": "PDF design is pending implementation. Returning JSON representation.",
-	})
-}

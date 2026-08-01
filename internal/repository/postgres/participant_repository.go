@@ -114,3 +114,60 @@ func (r *ParticipantRepository) List(ctx context.Context, limit, offset int) ([]
 
 	return list, total, nil
 }
+
+// GetByIDs retrieves participants by a slice of UUIDs.
+func (r *ParticipantRepository) GetByIDs(ctx context.Context, ids []string) ([]*domain.Participant, error) {
+	if len(ids) == 0 {
+		return []*domain.Participant{}, nil
+	}
+
+	query := `
+		SELECT id, full_name, category_id, qr_token, status, created_at, updated_at
+		FROM participants
+		WHERE id = ANY($1);
+	`
+	rows, err := r.db.Query(ctx, query, ids)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query participants by ids: %w", err)
+	}
+	defer rows.Close()
+
+	list := make([]*domain.Participant, 0)
+	for rows.Next() {
+		var p domain.Participant
+		err := rows.Scan(&p.ID, &p.FullName, &p.CategoryID, &p.QRToken, &p.Status, &p.CreatedAt, &p.UpdatedAt)
+		if err != nil {
+			return nil, fmt.Errorf("failed to scan participant row: %w", err)
+		}
+		list = append(list, &p)
+	}
+
+	return list, rows.Err()
+}
+
+// GetByCategoryID retrieves all active participants for a given category.
+func (r *ParticipantRepository) GetByCategoryID(ctx context.Context, categoryID int) ([]*domain.Participant, error) {
+	query := `
+		SELECT id, full_name, category_id, qr_token, status, created_at, updated_at
+		FROM participants
+		WHERE category_id = $1 AND status = 'ACTIVE';
+	`
+	rows, err := r.db.Query(ctx, query, categoryID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query participants by category_id: %w", err)
+	}
+	defer rows.Close()
+
+	list := make([]*domain.Participant, 0)
+	for rows.Next() {
+		var p domain.Participant
+		err := rows.Scan(&p.ID, &p.FullName, &p.CategoryID, &p.QRToken, &p.Status, &p.CreatedAt, &p.UpdatedAt)
+		if err != nil {
+			return nil, fmt.Errorf("failed to scan participant row: %w", err)
+		}
+		list = append(list, &p)
+	}
+
+	return list, rows.Err()
+}
+

@@ -11,6 +11,7 @@ import (
 	"github.com/Devesanoff/olympic-sport-backend/internal/service"
 	"github.com/Devesanoff/olympic-sport-backend/pkg/hmac"
 	"github.com/Devesanoff/olympic-sport-backend/pkg/jwt"
+	"github.com/Devesanoff/olympic-sport-backend/pkg/websocket"
 	"github.com/gin-gonic/gin"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/redis/go-redis/v9"
@@ -85,6 +86,21 @@ func NewRouter(cfg *RouterConfig) *gin.Engine {
 	participantService := service.NewParticipantService(participantRepo, cfg.HMACHelper)
 	participantHandler := handler.NewParticipantHandler(participantService)
 
+	wsHub := websocket.NewHub()
+	go wsHub.Run()
+	wsHandler := handler.NewDashboardWSHandler(wsHub, cfg.JWTHelper)
+
+	scanRepo := postgres.NewScanRepository(cfg.DB)
+	scanService := service.NewScanService(scanRepo, scanRepo, cfg.Redis, cfg.HMACHelper, wsHub)
+	scanHandler := handler.NewScanHandler(scanService)
+
+	syncRepo := postgres.NewSyncRepository(cfg.DB)
+	syncService := service.NewSyncService(syncRepo)
+	syncHandler := handler.NewSyncHandler(syncService)
+
+	badgeService := service.NewBadgeService(participantRepo, scanRepo)
+	badgeHandler := handler.NewBadgeHandler(badgeService)
+
 	// Public API Group
 	api := router.Group("/api")
 	{
@@ -109,6 +125,9 @@ func NewRouter(cfg *RouterConfig) *gin.Engine {
 			})
 		})
 
+		// WebSocket Live Stats (using standard route group but handles WS upgrade)
+		protected.GET("/dashboard/live-stats", wsHandler.ServeLiveStatsWS)
+
 		protected.POST("/scanner/scan", rbac("scanner:access"), func(c *gin.Context) {
 			userID, _ := c.Get(middleware.CtxUserIDKey)
 			c.JSON(http.StatusOK, gin.H{
@@ -117,11 +136,22 @@ func NewRouter(cfg *RouterConfig) *gin.Engine {
 			})
 		})
 
+		// High-Throughput Scan Endpoints
+		protected.POST("/scan/access", rbac("scanner:access"), scanHandler.ScanAccess)
+		protected.POST("/scan/meal", rbac("scanner:access"), scanHandler.ScanMeal)
+
+		// Sync Endpoints
+		protected.GET("/sync/offline-package", rbac("scanner:access"), syncHandler.GetOfflinePackage)
+		protected.POST("/sync/upload-logs", rbac("scanner:access"), syncHandler.UploadLogs)
+
 		// Participant Endpoints
 		protected.POST("/participants", rbac("participants:write"), participantHandler.Create)
 		protected.GET("/participants/:id", rbac("participants:read"), participantHandler.GetByID)
 		protected.GET("/participants", rbac("participants:read"), participantHandler.List)
-		protected.GET("/badges/:participantId/generate", rbac("participants:read"), participantHandler.GenerateBadge)
+		
+		// Badge Endpoints
+		protected.GET("/badges/:participantId/generate", rbac("participants:read"), badgeHandler.GenerateSingle)
+		protected.POST("/badges/bulk-generate", rbac("participants:read"), badgeHandler.GenerateBulk)
 	}
 
 	return router
