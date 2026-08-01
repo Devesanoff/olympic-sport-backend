@@ -7,6 +7,9 @@ import (
 	"github.com/Devesanoff/olympic-sport-backend/config"
 	"github.com/Devesanoff/olympic-sport-backend/internal/delivery/http/handler"
 	"github.com/Devesanoff/olympic-sport-backend/internal/delivery/http/middleware"
+	"github.com/Devesanoff/olympic-sport-backend/internal/repository/postgres"
+	"github.com/Devesanoff/olympic-sport-backend/internal/service"
+	"github.com/Devesanoff/olympic-sport-backend/pkg/hmac"
 	"github.com/Devesanoff/olympic-sport-backend/pkg/jwt"
 	"github.com/gin-gonic/gin"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -15,10 +18,11 @@ import (
 
 // RouterConfig holds dependencies required by HTTP router.
 type RouterConfig struct {
-	Config    *config.Config
-	DB        *pgxpool.Pool
-	Redis     *redis.Client
-	JWTHelper *jwt.Helper
+	Config     *config.Config
+	DB         *pgxpool.Pool
+	Redis      *redis.Client
+	JWTHelper  *jwt.Helper
+	HMACHelper *hmac.Helper
 }
 
 // NewRouter initializes Gin HTTP engine with middleware and core system routes.
@@ -31,6 +35,7 @@ func NewRouter(cfg *RouterConfig) *gin.Engine {
 
 	router.Use(gin.Recovery())
 	router.Use(middleware.RequestLogger())
+
 
 	// System Health & Liveness Endpoints
 	router.GET("/healthz", func(c *gin.Context) {
@@ -76,6 +81,10 @@ func NewRouter(cfg *RouterConfig) *gin.Engine {
 	// Handlers
 	authHandler := handler.NewAuthHandler(cfg.JWTHelper)
 
+	participantRepo := postgres.NewParticipantRepository(cfg.DB)
+	participantService := service.NewParticipantService(participantRepo, cfg.HMACHelper)
+	participantHandler := handler.NewParticipantHandler(participantService)
+
 	// Public API Group
 	api := router.Group("/api")
 	{
@@ -107,6 +116,12 @@ func NewRouter(cfg *RouterConfig) *gin.Engine {
 				"user_id": userID,
 			})
 		})
+
+		// Participant Endpoints
+		protected.POST("/participants", rbac("participants:write"), participantHandler.Create)
+		protected.GET("/participants/:id", rbac("participants:read"), participantHandler.GetByID)
+		protected.GET("/participants", rbac("participants:read"), participantHandler.List)
+		protected.GET("/badges/:participantId/generate", rbac("participants:read"), participantHandler.GenerateBadge)
 	}
 
 	return router

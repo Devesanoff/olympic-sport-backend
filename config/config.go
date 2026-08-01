@@ -13,6 +13,7 @@ type Config struct {
 	Postgres PostgresConfig `mapstructure:",squash"`
 	Redis    RedisConfig    `mapstructure:",squash"`
 	JWT      JWTConfig      `mapstructure:",squash"`
+	HMAC     HMACConfig     `mapstructure:",squash"`
 }
 
 type AppConfig struct {
@@ -29,6 +30,10 @@ type ServerConfig struct {
 type JWTConfig struct {
 	Secret     string        `mapstructure:"JWT_SECRET"`
 	Expiration time.Duration `mapstructure:"JWT_EXPIRATION"`
+}
+
+type HMACConfig struct {
+	Secret string `mapstructure:"HMAC_SECRET"`
 }
 
 type PostgresConfig struct {
@@ -91,6 +96,7 @@ func LoadConfig(path string) (*Config, error) {
 	viper.SetDefault("REDIS_POOL_SIZE", 100)
 	viper.SetDefault("JWT_SECRET", "supersecretjwtkeyforolympicsports")
 	viper.SetDefault("JWT_EXPIRATION", "24h")
+	viper.SetDefault("HMAC_SECRET", "supersecrethmacsigningkeyforqrcodes")
 
 	viper.AutomaticEnv()
 
@@ -115,6 +121,9 @@ func LoadConfig(path string) (*Config, error) {
 	}
 	if err := viper.Unmarshal(&cfg.JWT); err != nil {
 		return nil, fmt.Errorf("error unmarshaling jwt config: %w", err)
+	}
+	if err := viper.Unmarshal(&cfg.HMAC); err != nil {
+		return nil, fmt.Errorf("error unmarshaling hmac config: %w", err)
 	}
 
 	return &cfg, nil

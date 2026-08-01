@@ -107,8 +107,8 @@ func checkRolePermission(ctx context.Context, rdb *redis.Client, db *pgxpool.Poo
 		// If DB is offline (degraded setup for testing), we mock roles
 		log.Warn().Msg("PostgreSQL client not initialized; running mocked RBAC permissions")
 		mockedPermissions := map[string][]string{
-			"ADMIN":   {"dashboard:view", "users:manage", "scanner:access"},
-			"SCANNER": {"scanner:access"},
+			"ADMIN":   {"dashboard:view", "users:manage", "scanner:access", "participants:write", "participants:read"},
+			"SCANNER": {"scanner:access", "participants:read"},
 		}
 		for _, permName := range mockedPermissions[role] {
 			permissions = append(permissions, permName)

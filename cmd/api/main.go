@@ -11,6 +11,7 @@ import (
 	"github.com/Devesanoff/olympic-sport-backend/config"
 	httpDelivery "github.com/Devesanoff/olympic-sport-backend/internal/delivery/http"
 	"github.com/Devesanoff/olympic-sport-backend/pkg/database"
+	"github.com/Devesanoff/olympic-sport-backend/pkg/hmac"
 	"github.com/Devesanoff/olympic-sport-backend/pkg/jwt"
 	"github.com/Devesanoff/olympic-sport-backend/pkg/logger"
 	"github.com/rs/zerolog/log"
@@ -52,15 +53,17 @@ func main() {
 		}()
 	}
 
-	// 5. Initialize JWT Helper
+	// 5. Initialize JWT and HMAC Helpers
 	jwtHelper := jwt.NewHelper(cfg.JWT.Secret, cfg.JWT.Expiration)
+	hmacHelper := hmac.NewHelper(cfg.HMAC.Secret)
 
 	// 6. Initialize Router & Server
 	router := httpDelivery.NewRouter(&httpDelivery.RouterConfig{
-		Config:    cfg,
-		DB:        dbPool,
-		Redis:     redisClient,
-		JWTHelper: jwtHelper,
+		Config:     cfg,
+		DB:         dbPool,
+		Redis:      redisClient,
+		JWTHelper:  jwtHelper,
+		HMACHelper: hmacHelper,
 	})
 
 	server := &http.Server{
