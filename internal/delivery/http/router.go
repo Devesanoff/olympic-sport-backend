@@ -7,6 +7,7 @@ import (
 	"github.com/Devesanoff/olympic-sport-backend/config"
 	"github.com/Devesanoff/olympic-sport-backend/internal/delivery/http/handler"
 	"github.com/Devesanoff/olympic-sport-backend/internal/delivery/http/middleware"
+	"github.com/Devesanoff/olympic-sport-backend/internal/domain"
 	"github.com/Devesanoff/olympic-sport-backend/internal/repository/postgres"
 	"github.com/Devesanoff/olympic-sport-backend/internal/service"
 	"github.com/Devesanoff/olympic-sport-backend/pkg/hmac"
@@ -101,6 +102,22 @@ func NewRouter(cfg *RouterConfig) *gin.Engine {
 	badgeService := service.NewBadgeService(participantRepo, scanRepo)
 	badgeHandler := handler.NewBadgeHandler(badgeService)
 
+	adminRepo := postgres.NewAdminRepository(cfg.DB)
+	adminService := service.NewAdminService(&domain.AdminRepoBundle{
+		ZoneRepo:         adminRepo,
+		CategoryRepo:     adminRepo,
+		MealScheduleRepo: adminRepo,
+		RBACRepo:         adminRepo,
+		UserRepo:         adminRepo,
+	}, cfg.Redis)
+	adminHandler := handler.NewAdminHandler(
+		adminService,
+		adminService,
+		adminService,
+		adminService,
+		adminService,
+	)
+
 	// Public API Group
 	api := router.Group("/api")
 	{
@@ -152,6 +169,45 @@ func NewRouter(cfg *RouterConfig) *gin.Engine {
 		// Badge Endpoints
 		protected.GET("/badges/:participantId/generate", rbac("participants:read"), badgeHandler.GenerateSingle)
 		protected.POST("/badges/bulk-generate", rbac("participants:read"), badgeHandler.GenerateBulk)
+
+		// Admin CRUD Endpoints: Zones
+		protected.GET("/zones", rbac("zones:read"), adminHandler.ListZones)
+		protected.GET("/zones/:id", rbac("zones:read"), adminHandler.GetZoneByID)
+		protected.POST("/zones", rbac("zones:write"), adminHandler.CreateZone)
+		protected.PUT("/zones/:id", rbac("zones:write"), adminHandler.UpdateZone)
+		protected.DELETE("/zones/:id", rbac("zones:write"), adminHandler.DeleteZone)
+
+		// Admin CRUD Endpoints: Categories
+		protected.GET("/categories", rbac("categories:read"), adminHandler.ListCategories)
+		protected.GET("/categories/:id", rbac("categories:read"), adminHandler.GetCategoryByID)
+		protected.POST("/categories", rbac("categories:write"), adminHandler.CreateCategory)
+		protected.PUT("/categories/:id", rbac("categories:write"), adminHandler.UpdateCategory)
+		protected.DELETE("/categories/:id", rbac("categories:write"), adminHandler.DeleteCategory)
+		protected.POST("/categories/:id/zones", rbac("categories:write"), adminHandler.SetCategoryAllowedZones)
+
+		// Admin CRUD Endpoints: Meal Schedules
+		protected.GET("/meal-schedules", rbac("meal_schedules:read"), adminHandler.ListMealSchedules)
+		protected.GET("/meal-schedules/:id", rbac("meal_schedules:read"), adminHandler.GetMealScheduleByID)
+		protected.POST("/meal-schedules", rbac("meal_schedules:write"), adminHandler.CreateMealSchedule)
+		protected.PUT("/meal-schedules/:id", rbac("meal_schedules:write"), adminHandler.UpdateMealSchedule)
+		protected.DELETE("/meal-schedules/:id", rbac("meal_schedules:write"), adminHandler.DeleteMealSchedule)
+		protected.POST("/meal-schedules/:id/categories", rbac("meal_schedules:write"), adminHandler.SetMealScheduleCategories)
+
+		// Admin CRUD Endpoints: Dynamic RBAC
+		protected.GET("/roles", rbac("roles:read"), adminHandler.ListRoles)
+		protected.POST("/roles", rbac("roles:write"), adminHandler.CreateRole)
+		protected.DELETE("/roles/:id", rbac("roles:write"), adminHandler.DeleteRole)
+		protected.GET("/permissions", rbac("roles:read"), adminHandler.ListPermissions)
+		protected.POST("/permissions", rbac("roles:write"), adminHandler.CreatePermission)
+		protected.POST("/roles/:id/permissions", rbac("roles:write"), adminHandler.AssignPermissionsToRole)
+
+		// Admin CRUD Endpoints: Users Management
+		protected.GET("/users", rbac("users:read"), adminHandler.ListUsers)
+		protected.GET("/users/:id", rbac("users:read"), adminHandler.GetUserByID)
+		protected.POST("/users", rbac("users:write"), adminHandler.CreateUser)
+		protected.PUT("/users/:id", rbac("users:write"), adminHandler.UpdateUser)
+		protected.DELETE("/users/:id", rbac("users:write"), adminHandler.DeleteUser)
+		protected.POST("/users/:id/roles", rbac("users:write"), adminHandler.AssignUserRoles)
 	}
 
 	return router
