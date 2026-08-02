@@ -27,10 +27,11 @@ func TestScanService_MealAndAccess(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to connect to Redis for test: %v", err)
 	}
+	rdb.FlushDB(ctx) // Clear any leftover state before starting
 	defer rdb.FlushDB(ctx) // Clean up test keys after test
 	defer rdb.Close()
 
-	svc := NewScanService(nil, nil, rdb, hmacHelper)
+	svc := NewScanService(nil, nil, rdb, hmacHelper, nil)
 	defer svc.Close()
 
 	participantID := "123e4567-e89b-12d3-a456-426614174000"

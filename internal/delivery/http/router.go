@@ -102,6 +102,10 @@ func NewRouter(cfg *RouterConfig) *gin.Engine {
 	badgeService := service.NewBadgeService(participantRepo, scanRepo)
 	badgeHandler := handler.NewBadgeHandler(badgeService)
 
+	reportRepo := postgres.NewReportRepository(cfg.DB)
+	reportService := service.NewReportService(reportRepo)
+	reportHandler := handler.NewReportHandler(reportService)
+
 	adminRepo := postgres.NewAdminRepository(cfg.DB)
 	adminService := service.NewAdminService(&domain.AdminRepoBundle{
 		ZoneRepo:         adminRepo,
@@ -169,6 +173,12 @@ func NewRouter(cfg *RouterConfig) *gin.Engine {
 		// Badge Endpoints
 		protected.GET("/badges/:participantId/generate", rbac("participants:read"), badgeHandler.GenerateSingle)
 		protected.POST("/badges/bulk-generate", rbac("participants:read"), badgeHandler.GenerateBulk)
+
+		// Report Endpoints
+		protected.GET("/reports/access-logs", rbac("reports:read"), reportHandler.GetAccessLogs)
+		protected.GET("/reports/meal-logs", rbac("reports:read"), reportHandler.GetMealLogs)
+		protected.GET("/reports/denied-attempts", rbac("reports:read"), reportHandler.GetDeniedAttempts)
+		protected.GET("/reports/export/excel", rbac("reports:read"), reportHandler.ExportExcel)
 
 		// Admin CRUD Endpoints: Zones
 		protected.GET("/zones", rbac("zones:read"), adminHandler.ListZones)

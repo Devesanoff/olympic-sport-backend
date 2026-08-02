@@ -42,6 +42,26 @@ func (m *mockParticipantRepository) List(ctx context.Context, limit, offset int)
 	return list, len(m.participants), nil
 }
 
+func (m *mockParticipantRepository) GetByIDs(ctx context.Context, ids []string) ([]*domain.Participant, error) {
+	var list []*domain.Participant
+	for _, id := range ids {
+		if p, ok := m.participants[id]; ok {
+			list = append(list, p)
+		}
+	}
+	return list, nil
+}
+
+func (m *mockParticipantRepository) GetByCategoryID(ctx context.Context, categoryID int) ([]*domain.Participant, error) {
+	var list []*domain.Participant
+	for _, p := range m.participants {
+		if p.CategoryID == categoryID && p.Status == domain.ParticipantStatusActive {
+			list = append(list, p)
+		}
+	}
+	return list, nil
+}
+
 func TestParticipantService(t *testing.T) {
 	hmacHelper := hmac.NewHelper("testsecretsigningkey")
 	repo := &mockParticipantRepository{
