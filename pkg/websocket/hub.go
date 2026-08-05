@@ -46,7 +46,7 @@ func (h *Hub) BroadcastZoneUpdate(update domain.ZoneOccupancyUpdate) {
 	h.broadcast <- update
 }
 
-// Run starts the hub loop to handle registers, unregisters, and broadcasts.
+
 func (h *Hub) Run() {
 	for {
 		select {
@@ -82,7 +82,7 @@ func (h *Hub) Run() {
 	}
 }
 
-// writePump pumps messages from the hub to the websocket connection.
+
 func (c *Client) writePump() {
 	ticker := time.NewTicker(pingPeriod)
 	defer func() {

@@ -1,21 +1,30 @@
 package handler
 
 import (
+	"context"
+	"errors"
 	"net/http"
+	"strings"
 
+	"github.com/Devesanoff/olympic-sport-backend/internal/domain"
 	"github.com/Devesanoff/olympic-sport-backend/pkg/jwt"
 	"github.com/gin-gonic/gin"
+	"github.com/jackc/pgx/v5"
+	"golang.org/x/crypto/bcrypt"
 )
 
 // AuthHandler holds dependencies for authentication HTTP endpoints.
 type AuthHandler struct {
 	jwtHelper *jwt.Helper
+	userRepo  domain.UserAdminRepository
 }
 
 // NewAuthHandler creates a new AuthHandler instance.
-func NewAuthHandler(jwtHelper *jwt.Helper) *AuthHandler {
+// userRepo is used to validate credentials against the database.
+func NewAuthHandler(jwtHelper *jwt.Helper, userRepo domain.UserAdminRepository) *AuthHandler {
 	return &AuthHandler{
 		jwtHelper: jwtHelper,
+		userRepo:  userRepo,
 	}
 }
 
@@ -30,7 +39,11 @@ type LoginResponse struct {
 	AccessToken string `json:"access_token"`
 }
 
-// Login verifies credentials against static accounts and returns a JWT access token.
+// Login fetches the user from the DB, verifies the bcrypt password, reads
+// their primary role, and issues a signed JWT containing the real role name.
+// This ensures that any role (Guard, KitchenManager, SuperAdmin, …) stored in
+// the database will be correctly embedded into the token and subsequently
+// honoured by RBACMiddleware.
 func (h *AuthHandler) Login(c *gin.Context) {
 	var req LoginRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -38,28 +51,57 @@ func (h *AuthHandler) Login(c *gin.Context) {
 		return
 	}
 
-	var userID string
-	var role string
+	ctx := c.Request.Context()
 
-	// Static credentials validation for scanning & admin access
-	if req.Email == "admin@olympic.com" && req.Password == "admin123" {
-		userID = "00000000-0000-0000-0000-000000000001"
-		role = "ADMIN"
-	} else if req.Email == "scanner@olympic.com" && req.Password == "scanner123" {
-		userID = "00000000-0000-0000-0000-000000000002"
-		role = "SCANNER"
-	} else {
+	// --- 1. Fetch user from database ---
+	user, err := h.userRepo.GetUserByEmail(ctx, req.Email)
+	if err != nil {
+		if isNotFoundError(ctx, err) {
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "invalid email or password"})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to verify credentials"})
+		return
+	}
+
+	// --- 2. Verify bcrypt password ---
+	if err := bcrypt.CompareHashAndPassword([]byte(user.PasswordHash), []byte(req.Password)); err != nil {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "invalid email or password"})
 		return
 	}
 
-	token, err := h.jwtHelper.GenerateToken(userID, role)
+	// --- 3. Extract primary role name ---
+	// A user may have multiple roles; we embed the first (highest-priority) one.
+	// RBACMiddleware looks up all permissions for that role name from the DB/Redis.
+	roleName := extractPrimaryRole(user)
+	if roleName == "" {
+		c.JSON(http.StatusForbidden, gin.H{"error": "user has no assigned roles"})
+		return
+	}
+
+	// --- 4. Issue JWT ---
+	token, err := h.jwtHelper.GenerateToken(user.ID, roleName)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to generate authentication token"})
 		return
 	}
 
-	c.JSON(http.StatusOK, LoginResponse{
-		AccessToken: token,
-	})
+	c.JSON(http.StatusOK, LoginResponse{AccessToken: token})
+}
+
+// extractPrimaryRole returns the name of the first role assigned to the user.
+// Returns an empty string if the user has no roles.
+func extractPrimaryRole(user *domain.User) string {
+	if len(user.Roles) > 0 {
+		return user.Roles[0].Name
+	}
+	return ""
+}
+
+// isNotFoundError returns true when the DB signals that no row was found.
+func isNotFoundError(_ context.Context, err error) bool {
+	if errors.Is(err, pgx.ErrNoRows) {
+		return true
+	}
+	return strings.Contains(err.Error(), "no rows")
 }

@@ -104,11 +104,32 @@ func checkRolePermission(ctx context.Context, rdb *redis.Client, db *pgxpool.Poo
 			return false, fmt.Errorf("row iteration error: %w", err)
 		}
 	} else {
-		// If DB is offline (degraded setup for testing), we mock roles
+		// If DB is offline (degraded setup for testing), we mock roles.
+		// Keep this map in sync with the seeder's rolePermissions definition.
 		log.Warn().Msg("PostgreSQL client not initialized; running mocked RBAC permissions")
 		mockedPermissions := map[string][]string{
-			"ADMIN":   {"dashboard:view", "users:manage", "scanner:access", "participants:write", "participants:read", "reports:read"},
-			"SCANNER": {"scanner:access", "participants:read"},
+			"SuperAdmin": {
+				"dashboard:view", "scanner:access", "participants:write", "participants:read",
+				"reports:read", "zones:read", "zones:write", "categories:read", "categories:write",
+				"meal_schedules:read", "meal_schedules:write", "roles:read", "roles:write",
+				"users:read", "users:write",
+			},
+			"ADMIN": {
+				"dashboard:view", "scanner:access", "participants:write", "participants:read",
+				"reports:read", "zones:read", "zones:write", "categories:read", "categories:write",
+				"meal_schedules:read", "meal_schedules:write", "roles:read", "roles:write",
+				"users:read", "users:write",
+			},
+			// Guard: mobile operator — must be able to reach GET /api/sync/offline-package
+			"Guard": {
+				"scanner:access", "participants:read", "zones:read",
+			},
+			"SCANNER": {
+				"scanner:access", "participants:read", "zones:read",
+			},
+			"KitchenManager": {
+				"scanner:access", "participants:read", "meal_schedules:read", "meal_schedules:write",
+			},
 		}
 		for _, permName := range mockedPermissions[role] {
 			permissions = append(permissions, permName)

@@ -81,7 +81,10 @@ func NewRouter(cfg *RouterConfig) *gin.Engine {
 	})
 
 	// Handlers
-	authHandler := handler.NewAuthHandler(cfg.JWTHelper)
+	// adminRepo is constructed first so its UserAdminRepository interface can
+	// be injected into authHandler for real DB-backed credential validation.
+	adminRepo := postgres.NewAdminRepository(cfg.DB)
+	authHandler := handler.NewAuthHandler(cfg.JWTHelper, adminRepo)
 
 	participantRepo := postgres.NewParticipantRepository(cfg.DB)
 	participantService := service.NewParticipantService(participantRepo, cfg.HMACHelper)
@@ -106,7 +109,7 @@ func NewRouter(cfg *RouterConfig) *gin.Engine {
 	reportService := service.NewReportService(reportRepo)
 	reportHandler := handler.NewReportHandler(reportService)
 
-	adminRepo := postgres.NewAdminRepository(cfg.DB)
+	// adminRepo was declared above for authHandler; reuse it here.
 	adminService := service.NewAdminService(&domain.AdminRepoBundle{
 		ZoneRepo:         adminRepo,
 		CategoryRepo:     adminRepo,

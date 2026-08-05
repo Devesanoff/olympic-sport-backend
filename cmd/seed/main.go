@@ -193,6 +193,47 @@ func main() {
 		log.Info().Str("email", adminEmail).Msg("SuperAdmin user already exists, skipping creation")
 	}
 
+	// 7b. Seed Guard (Mobile Operator) Test User
+	// This user is used by the mobile team to authenticate as a Guard and
+	// call GET /api/sync/offline-package (requires "scanner:access" permission).
+	guardEmail := os.Getenv("SEED_GUARD_EMAIL")
+	if guardEmail == "" {
+		guardEmail = "guard@olympic.org"
+	}
+	guardPassword := os.Getenv("SEED_GUARD_PASSWORD")
+	if guardPassword == "" {
+		guardPassword = "GuardPassword123!"
+	}
+
+	_, err = repo.GetUserByEmail(ctx, guardEmail)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) || strings.Contains(err.Error(), "no rows") {
+			hashedGuardPassword, err := bcrypt.GenerateFromPassword([]byte(guardPassword), bcrypt.DefaultCost)
+			if err != nil {
+				log.Fatal().Err(err).Msg("Failed to hash guard user password")
+			}
+
+			guardUser := &domain.User{
+				Email:        guardEmail,
+				PasswordHash: string(hashedGuardPassword),
+			}
+
+			guardRoleID, ok := roleMap["Guard"]
+			if !ok {
+				log.Fatal().Msg("Guard role not found in role map — cannot seed guard user")
+			}
+
+			if err := repo.CreateUser(ctx, guardUser, []int{guardRoleID}); err != nil {
+				log.Fatal().Err(err).Msg("Failed to create Guard user")
+			}
+			log.Info().Str("email", guardEmail).Msg("Successfully seeded Guard (mobile operator) user")
+		} else {
+			log.Fatal().Err(err).Msg("Failed to check Guard user existence")
+		}
+	} else {
+		log.Info().Str("email", guardEmail).Msg("Guard user already exists, skipping creation")
+	}
+
 	// 8. Seed test Category, Zone, and Participant for Performance Testing
 	var catID int
 	err = dbPool.QueryRow(ctx, `
